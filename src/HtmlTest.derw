@@ -1,0 +1,68 @@
+exposing (testPlan, Action, Click, ValidateAttribute)
+
+type Result success failure = Ok { value: success } | Err { value: failure }
+
+click: string -> Result string string
+click query =
+    let
+        element: any
+        element = document.querySelector query
+    in
+        if element == null then
+            Err { value: `Failed to find ${query}` }
+        else
+            let
+                runClick: void
+                runClick =
+                    element.click()
+            in
+                Ok { value: "Clicked element" }
+
+getAttribute: string -> string -> Result string string
+getAttribute query attribute =
+    let
+        element: any
+        element = document.querySelector query
+    in
+        if element == null then
+            Err { value: `Failed to find ${query}`}
+        else
+            Ok { value: element.getAttribute attribute || element[attribute] }
+
+type Action = Click { selector: string } | ValidateAttribute { selector: string, attributeName: string, attributeValue: any }
+
+type Plan = Success | Failure { planStep: Action, reason: string }
+
+testPlanHelper: List Action -> Plan -> Plan
+testPlanHelper xs plan =
+    case xs of
+        [] -> Success
+        x::ys ->
+            case x of
+                Click { selector } ->
+                    case click selector of
+                        Ok { value } -> testPlanHelper ys Success
+                        Err { value } -> Failure { planStep: x, reason: value }
+
+                ValidateAttribute { selector, attributeName, attributeValue } ->
+                    case getAttribute selector attributeName of
+                        Ok { value } ->
+                            if value == attributeValue then
+                                testPlanHelper ys Success
+                            else
+                                Failure { planStep: x, reason: `Expected ${selector}.${attributeName} to be ${attributeValue} but was ${value}` }
+                        Err { value } -> Failure { planStep: x, reason: value }
+        default -> Success
+
+testPlan: List Action -> (void -> void) -> Plan
+testPlan actions afterPlan =
+    let
+        plan: Plan
+        plan =
+            testPlanHelper actions Success
+
+        runAfter: void
+        runAfter =
+            afterPlan()
+    in
+        plan

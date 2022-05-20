@@ -1,0 +1,69 @@
+import "../../src/HtmlTest" exposing (Click, ValidateAttribute, Action, testPlan)
+import "../derw-packages/derw-lang/html/src/Html" as Html exposing ( HtmlNode, RunningProgram, div, text, program, attribute, class_ )
+
+type alias Model = {
+    number: number
+}
+
+initialModel: Model
+initialModel =
+    { number: 0 }
+
+type Msg =
+    Noop
+    | Clicked
+    | RunTests
+
+plan: List Action
+plan =
+    [
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "0" },
+        Click { selector: "button" },
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "1" },
+        Click { selector: "button" },
+        Click { selector: "button" },
+        Click { selector: "button" },
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "4" }
+     ]
+
+update: Msg -> Model -> (Msg -> void) -> Model
+update msg model send =
+    case msg of
+        Noop ->
+            model
+
+        Clicked ->
+            { number: model.number + 1 }
+
+        RunTests ->
+            let
+                blank: void
+                blank =
+                    testPlan plan (\_ -> send Noop)
+                        |> console.log
+            in
+                model
+
+viewTestRunner: HtmlNode Msg
+viewTestRunner =
+    Html.button [ Html.onClick (\_ -> RunTests) ] [ ] [ text "Run tests" ]
+
+view: Model -> HtmlNode Msg
+view model =
+    div [ ] [ ] [
+        Html.button [ Html.onClick (\_ -> Clicked) ] [ ] [ text `${model.number}` ],
+        viewTestRunner
+    ]
+
+root: any
+root =
+    document.getElementById "root"
+
+main: RunningProgram Model Msg
+main =
+    program {
+        initialModel: initialModel,
+        view: view,
+        update: update,
+        root: root
+    }
