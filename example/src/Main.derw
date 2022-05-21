@@ -1,4 +1,4 @@
-import "../../src/HtmlTest" exposing (Click, ValidateAttribute, Action, testPlan)
+import "../../src/HtmlTest" exposing (Click, ValidateAttribute, Action, testPlan, Plan, runPlan)
 import "../derw-packages/derw-lang/html/src/Html" as Html exposing ( HtmlNode, RunningProgram, div, text, program, attribute, class_ )
 
 type alias Model = {
@@ -19,7 +19,7 @@ plan =
     [
         ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "0" },
         Click { selector: "button" },
-        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "1" },
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "3" },
         Click { selector: "button" },
         Click { selector: "button" },
         Click { selector: "button" },
@@ -39,8 +39,7 @@ update msg model send =
             let
                 blank: void
                 blank =
-                    testPlan plan (\_ -> send Noop)
-                        |> console.log
+                    runPlan plan
             in
                 model
 

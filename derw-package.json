@@ -1,5 +1,8 @@
 {
     "name": "html-test",
     "exposing": [],
-    "dependencies": {}
+    "dependencies": {
+        "derw-lang/html": "main",
+        "derw-lang/stdlib": "main"
+    }
 }

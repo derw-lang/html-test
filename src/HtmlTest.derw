@@ -1,4 +1,8 @@
-exposing (testPlan, Action, Click, ValidateAttribute)
+import "../derw-packages/derw-lang/html/src/Html" as Html exposing ( HtmlNode, RunningProgram, div, text, program, attribute, class_ )
+import "../derw-packages/derw-lang/stdlib/src/List" as List
+import "../derw-packages/derw-lang/stdlib/src/Maybe" exposing (Maybe, Just, Nothing)
+
+exposing (testPlan, Action, Click, ValidateAttribute, Plan, runPlan)
 
 type Result success failure = Ok { value: success } | Err { value: failure }
 
@@ -31,38 +35,183 @@ getAttribute query attribute =
 
 type Action = Click { selector: string } | ValidateAttribute { selector: string, attributeName: string, attributeValue: any }
 
-type Plan = Success | Failure { planStep: Action, reason: string }
+type Step = Success | Failure { reason: string } | NotRun
 
-testPlanHelper: List Action -> Plan -> Plan
-testPlanHelper xs plan =
+type alias ActionStep = {
+    action: Action,
+    step: Step
+}
+
+type Plan = CompletedPlan { plan: List ActionStep }
+
+notRun: List Action -> List ActionStep
+notRun xs =
+    List.map (\x -> { action: x, step: NotRun }) xs
+
+emptyList: List ActionStep
+emptyList =
+    []
+
+testPlanHelper: List Action -> List ActionStep
+testPlanHelper xs =
     case xs of
-        [] -> Success
-        x::ys ->
+        [] -> emptyList
+        x :: ys ->
             case x of
                 Click { selector } ->
                     case click selector of
-                        Ok { value } -> testPlanHelper ys Success
-                        Err { value } -> Failure { planStep: x, reason: value }
+                        Ok { value } -> { action: x, step: Success } :: testPlanHelper ys
+                        Err { value } -> { action: x, step: Failure { reason: value } } :: notRun ys
 
                 ValidateAttribute { selector, attributeName, attributeValue } ->
                     case getAttribute selector attributeName of
                         Ok { value } ->
                             if value == attributeValue then
-                                testPlanHelper ys Success
+                                { action: x, step: Success } :: testPlanHelper ys
                             else
-                                Failure { planStep: x, reason: `Expected ${selector}.${attributeName} to be ${attributeValue} but was ${value}` }
-                        Err { value } -> Failure { planStep: x, reason: value }
-        default -> Success
+                                {
+                                    action: x,
+                                    step: Failure {
+                                        reason: `Expected ${selector}.${attributeName} to be ${attributeValue} but was ${value}`
+                                    }
+                                } :: notRun ys
+                        Err { value } -> { action: x, step: Failure { reason: value }} :: notRun ys
+        default -> emptyList
 
-testPlan: List Action -> (void -> void) -> Plan
-testPlan actions afterPlan =
+testPlan: List Action -> Plan
+testPlan actions =
     let
         plan: Plan
         plan =
-            testPlanHelper actions Success
-
-        runAfter: void
-        runAfter =
-            afterPlan()
+            CompletedPlan { plan: testPlanHelper actions }
     in
         plan
+
+
+greenCircle: string
+greenCircle =
+    "🟢"
+
+orangeCircle: string
+orangeCircle =
+    "🟠"
+
+redCircle: string
+redCircle =
+    "🔴"
+
+consoleColorClass: ActionStep -> str -> void
+consoleColorClass actionStep message =
+    case actionStep.step of
+        Success ->
+            globalThis.console.log greenCircle message
+        Failure {} ->
+            globalThis.console.error redCircle message
+        NotRun ->
+            globalThis.console.warn orangeCircle message
+
+consoleActionStep: ActionStep -> void
+consoleActionStep actionStep =
+    case actionStep.action of
+        Click { selector } ->
+            consoleColorClass actionStep `Click on ${selector}`
+
+        ValidateAttribute { selector, attributeName, attributeValue } ->
+            consoleColorClass actionStep `Ensure that ${selector} has ${attributeName} === ${attributeValue}`
+
+consolePlan: Plan -> void
+consolePlan overallPlan =
+    case overallPlan of
+        CompletedPlan { plan } ->
+            let
+                run: List void
+                run = List.map consoleActionStep plan
+            in
+                undefined
+
+viewActionStep: ActionStep -> HtmlNode any
+viewActionStep actionStep =
+    let
+        colorClass: string
+        colorClass =
+            case actionStep.step of
+                Success -> "html-test-success"
+                Failure {} -> "html-test-failure"
+                NotRun -> "html-test-not-run"
+
+        colorCircle: string
+        colorCircle =
+            case actionStep.step of
+                Success -> greenCircle
+                Failure { reason } -> `${redCircle} ${reason} ${redCircle}`
+                NotRun -> orangeCircle
+    in
+        case actionStep.action of
+            Click { selector } ->
+                div [] [ class_ "html-test-click", class_ colorClass ] [ text `${colorCircle} Click on ${selector}` ]
+
+            ValidateAttribute { selector, attributeName, attributeValue } ->
+                div [] [ class_ "html-test-validate-attribute", class_ colorClass ] [ text `${colorCircle} Ensure that ${selector} has ${attributeName} === ${attributeValue}` ]
+
+viewStyle: HtmlNode any
+viewStyle =
+    Html.style [] [] [ text `.html-test-plan { margin: 10px; border: 1px solid black; }`]
+
+viewPlan: Plan -> HtmlNode any
+viewPlan overallPlan =
+    case overallPlan of
+        CompletedPlan { plan } ->
+            div [] [ class_ "html-test-plan" ] (viewStyle :: List.map viewActionStep plan)
+
+view: Model -> HtmlNode Msg
+view model =
+    case model.currentPlan of
+        Just { value } ->
+            div [] [] [ viewStyle, viewPlan value, div [] [] [ text "State reset to original model." ] ]
+
+        Nothing ->
+            div [] [ class_ "html-test-plan" ] [ viewStyle, text "Waiting to run a test." ]
+
+htmlTestRoot: any
+htmlTestRoot =
+    document.getElementById "html-test-root"
+
+type alias Model = {
+    currentPlan: Maybe Plan
+}
+
+initialModel: Model
+initialModel = {
+    currentPlan: Nothing
+}
+
+type Msg = Noop | SetPlan { plan: Plan }
+
+update: Msg -> Model -> Model
+update msg model =
+    case msg of
+        Noop -> model
+        SetPlan { plan } -> { currentPlan: Just { value: plan } }
+
+main: Maybe (RunningProgram Model Msg)
+main =
+    if htmlTestRoot == null then
+        Nothing
+    else
+        Just { value: program {
+            initialModel: initialModel,
+            view: view,
+            update: update,
+            root: htmlTestRoot
+        } }
+
+runPlan: List Action -> void
+runPlan actions =
+    case main of
+        Nothing ->
+            testPlan actions
+                |> consolePlan
+
+        Just { value: program } ->
+            testPlan actions
+                |> (\x -> program.send (SetPlan { plan: x }))
