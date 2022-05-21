@@ -4,3 +4,4 @@
 
 derw-packages/
 src/**/*.ts
+build.js

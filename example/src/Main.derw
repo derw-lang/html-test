@@ -1,17 +1,19 @@
-import "../../src/HtmlTest" exposing (Click, ValidateAttribute, Action, testPlan, Plan, runPlan)
+import "../../src/HtmlTest" exposing (Click, Input, ValidateAttribute, Action, testPlan, Plan, runPlan)
 import "../derw-packages/derw-lang/html/src/Html" as Html exposing ( HtmlNode, RunningProgram, div, text, program, attribute, class_ )
 
 type alias Model = {
-    number: number
+    number: number,
+    text: string
 }
 
 initialModel: Model
 initialModel =
-    { number: 0 }
+    { number: 0, text: "" }
 
 type Msg =
     Noop
     | Clicked
+    | ChangeText { value: string }
     | RunTests
 
 plan: List Action
@@ -19,11 +21,13 @@ plan =
     [
         ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "0" },
         Click { selector: "button" },
-        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "3" },
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "1" },
         Click { selector: "button" },
         Click { selector: "button" },
         Click { selector: "button" },
-        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "4" }
+        ValidateAttribute { selector: "button", attributeName: "innerHTML", attributeValue: "4" },
+        Input { selector: "input", value: "noah" },
+        ValidateAttribute { selector: "#output", attributeName: "innerHTML", attributeValue: "noah" },
      ]
 
 update: Msg -> Model -> (Msg -> void) -> Model
@@ -33,7 +37,10 @@ update msg model send =
             model
 
         Clicked ->
-            { number: model.number + 1 }
+            { ...model, number: model.number + 1 }
+
+        ChangeText { value } ->
+            { ...model, text: value }
 
         RunTests ->
             let
@@ -47,10 +54,18 @@ viewTestRunner: HtmlNode Msg
 viewTestRunner =
     Html.button [ Html.onClick (\_ -> RunTests) ] [ ] [ text "Run tests" ]
 
+viewInput: string -> HtmlNode Msg
+viewInput value =
+    div [] [] [
+        Html.input [ Html.onInput (\newValue -> ChangeText { value: newValue })] [ Html.attribute "value" value ],
+        div [ ] [ Html.attribute "id" "output" ] [ text value ]
+    ]
+
 view: Model -> HtmlNode Msg
 view model =
     div [ ] [ ] [
         Html.button [ Html.onClick (\_ -> Clicked) ] [ ] [ text `${model.number}` ],
+        viewInput model.text,
         viewTestRunner
     ]
 

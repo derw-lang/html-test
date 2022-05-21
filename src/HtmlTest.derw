@@ -1,8 +1,9 @@
 import "../derw-packages/derw-lang/html/src/Html" as Html exposing ( HtmlNode, RunningProgram, div, text, program, attribute, class_ )
 import "../derw-packages/derw-lang/stdlib/src/List" as List
 import "../derw-packages/derw-lang/stdlib/src/Maybe" exposing (Maybe, Just, Nothing)
+import "./HtmlTest_kernel" as Kernel
 
-exposing (testPlan, Action, Click, ValidateAttribute, Plan, runPlan)
+exposing (testPlan, Action, Click, Input, ValidateAttribute, Plan, runPlan)
 
 type Result success failure = Ok { value: success } | Err { value: failure }
 
@@ -33,9 +34,43 @@ getAttribute query attribute =
         else
             Ok { value: element.getAttribute attribute || element[attribute] }
 
-type Action = Click { selector: string } | ValidateAttribute { selector: string, attributeName: string, attributeValue: any }
+changeInput: string -> string -> Result string string
+changeInput query value =
+    let
+        element: any
+        element = document.querySelector query
+    in
+        if element == null then
+            Err { value: `Failed to find ${query}` }
+        else
+            let
+                event: Event
+                event =
+                    document.createEvent "Event"
 
-type Step = Success | Failure { reason: string } | NotRun
+                init: void
+                init =
+                    event.initEvent "input" true true
+
+                set: void
+                set =
+                    Kernel.setValue element value
+
+                runClick: void
+                runClick =
+                    element.dispatchEvent event
+            in
+                Ok { value: "Changed element input" }
+
+type Action =
+    Click { selector: string }
+    | Input { selector: string, value: string }
+    | ValidateAttribute { selector: string, attributeName: string, attributeValue: any }
+
+type Step =
+    Success
+    | Failure { reason: string }
+    | NotRun
 
 type alias ActionStep = {
     action: Action,
@@ -60,6 +95,11 @@ testPlanHelper xs =
             case x of
                 Click { selector } ->
                     case click selector of
+                        Ok { value } -> { action: x, step: Success } :: testPlanHelper ys
+                        Err { value } -> { action: x, step: Failure { reason: value } } :: notRun ys
+
+                Input { selector, value } ->
+                    case changeInput selector value of
                         Ok { value } -> { action: x, step: Success } :: testPlanHelper ys
                         Err { value } -> { action: x, step: Failure { reason: value } } :: notRun ys
 
@@ -105,8 +145,8 @@ consoleColorClass actionStep message =
     case actionStep.step of
         Success ->
             globalThis.console.log greenCircle message
-        Failure {} ->
-            globalThis.console.error redCircle message
+        Failure { reason } ->
+            globalThis.console.error redCircle message redCircle reason
         NotRun ->
             globalThis.console.warn orangeCircle message
 
@@ -115,6 +155,9 @@ consoleActionStep actionStep =
     case actionStep.action of
         Click { selector } ->
             consoleColorClass actionStep `Click on ${selector}`
+
+        Input { selector, value } ->
+            consoleColorClass actionStep `Change ${selector} to ${value}`
 
         ValidateAttribute { selector, attributeName, attributeValue } ->
             consoleColorClass actionStep `Ensure that ${selector} has ${attributeName} === ${attributeValue}`
@@ -149,6 +192,9 @@ viewActionStep actionStep =
         case actionStep.action of
             Click { selector } ->
                 div [] [ class_ "html-test-click", class_ colorClass ] [ text `${colorCircle} Click on ${selector}` ]
+
+            Input { selector, value } ->
+                div [] [ class_ "html-test-change", class_ colorClass ] [ text `${colorCircle} Change ${selector} value to ${value}` ]
 
             ValidateAttribute { selector, attributeName, attributeValue } ->
                 div [] [ class_ "html-test-validate-attribute", class_ colorClass ] [ text `${colorCircle} Ensure that ${selector} has ${attributeName} === ${attributeValue}` ]
